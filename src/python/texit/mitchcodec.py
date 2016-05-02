@@ -1,20 +1,10 @@
 from xml.dom import minidom
 import binascii
 from decimal import *
+from datetime import datetime
 
-getcontext().prec = 5
+getcontext().prec = 8
 
-mitch_names_to_custom_names_map = {"ITCH Add Order" : {#msgtype="0x41"
-"ITCH Nanosecond":"Nanosecond",
-"ITCH Order ID":"OrId",
-"ITCH Side":"Side",
-"ITCH Quantity":"Quantity",
-"LSE ITCH Instrument ID":"InID",
-"ITCH Reserved 1":"R1",
-"ITCH Reserved 2":"R2",
-"ITCH Price":"Price",
-"ITCH Flags":"Flags"},
-}
 
 def chunkfy(data):
     return " ".join(data[i:i+2] for i in range(0, len(data), 2))
@@ -30,10 +20,11 @@ def encode_integer(data, length):
     return chunkfy(rev_hex_val_unspaced)
 
 
-def encode_UInt(length):
+def encode_uint(length):
     def x(data):
         return encode_integer(int(data), length)
     return x
+
 
 def decode_signed_integer_ver_1(data, start, length):
     rest_byte = 0x7f & data[0]  # 127
@@ -74,9 +65,6 @@ def decode_signed_integer_ver_3(data, start, length):
         return - (res & (~(1 << 15) & 0xffff))
 
 
-from datetime import datetime
-
-
 def decode_time(data, start):
     """HH:MM:SS"""
     return datetime.strptime(data[start:start+8].decode(), '%H:%M:%S').time()
@@ -112,6 +100,7 @@ def decode_byte(data, start, length):
 def encode_byte(data):
     return binascii.hexlify(data.encode()).decode()
 
+
 def decode_bitfield(data, start, length):
     result = []
     for i in range(7, -1, -1):
@@ -133,7 +122,7 @@ def encode_bitfield(data):
         return encode_integer(result, 1)
 
 #####################################################
-#####################################################
+
 
 def parse_alpha_with_length(length):
     def x(data, start):
@@ -152,6 +141,7 @@ def encode_price_from_string(data, length):
         data = data[0:dotIndex] + data[dotIndex+1:]
     return encode_signed_integer(int(data), length)
 
+
 def encode_price(length):
     def x(data):
         return encode_price_from_string(data, length)
@@ -160,29 +150,31 @@ def encode_price(length):
 
 def decode_price(decimals):
     def x(data, start, length):
-        return Decimal(decode_signed_integer(data, start, length)/decimals)
+        return float(Decimal(decode_signed_integer(data, start, length)/decimals))
     return x
+
+
 #def encode_b(data):
 #    rev_byte_val = ord(data).to_bytes(1, byteorder='little')
 #    rev_hex_val_unspaced = binascii.hexlify(bytearray(rev_byte_val)).decode()
 #    return rev_hex_val_unspaced
 
+#####################################################
 
-doc = minidom.parse("level2-itchmarketdataspecification-5-1-230710.txt")
-sizes = {"Alpha": 0, "BitField": 1, "Byte": 1, "Date": 8, "Time": 8, "Price": 8, "UInt8": 1, "UInt16": 2, "UInt32": 4,
+def load_grammar(file):
+    doc = minidom.parse(file)
+    sizes = {"Alpha": 0, "BitField": 1, "Byte": 1, "Date": 8, "Time": 8, "Price": 8, "UInt8": 1, "UInt16": 2, "UInt32": 4,
         "UInt64": 8}
-decoders = {"Alpha": decode_alpha, "BitField": decode_bitfield, "Byte": decode_byte, "Date": decode_date,
+    decoders = {"Alpha": decode_alpha, "BitField": decode_bitfield, "Byte": decode_byte, "Date": decode_date,
             "Time": decode_time, "Price": decode_price(100000000), "UInt8": decode_integer, "UInt16": decode_integer,
             "UInt32": decode_integer, "UInt64": decode_integer}
-encoders = {"Alpha": encode_alpha, "BitField": encode_bitfield, "Byte": encode_byte, "Date": encode_date,
+    encoders = {"Alpha": encode_alpha, "BitField": encode_bitfield, "Byte": encode_byte, "Date": encode_date,
             "Time": encode_time,
-            "Price": encode_price(8), "UInt8": encode_UInt(1), "UInt16": encode_UInt(2), "UInt32": encode_UInt(4),
-            "UInt64": encode_UInt(8)}
-
-msgs = doc.getElementsByTagName("msg")
-message_handlers = dict()
-for msg in msgs:
-        #print("%s %s" % (msg.getAttribute("msgtype"), msg.getAttribute("name")))
+            "Price": encode_price(8), "UInt8": encode_uint(1), "UInt16": encode_uint(2), "UInt32": encode_uint(4),
+            "UInt64": encode_uint(8)}
+    msgs = doc.getElementsByTagName("msg")
+    message_handlers = dict()
+    for msg in msgs:
         fields = msg.getElementsByTagName("fld")
         field_handlers = []
         for field in fields:
@@ -191,16 +183,15 @@ for msg in msgs:
             field_size = sizes[field.getAttribute("datatype")]
             if field_size == 0:
                 field_size = int(field.getAttribute("length"))
-            if msg.getAttribute("name") in mitch_names_to_custom_names_map:
-                name = mitch_names_to_custom_names_map[msg.getAttribute("name")][field.getAttribute("name")]
-            else:
-                name = field.getAttribute("name")
+            #if msg.getAttribute("name") in mitch_names_to_feprdr_names_map:
+            #    name = mitch_names_to_feprdr_names_map[msg.getAttribute("name")][field.getAttribute("name")]
+            #else:
+            name = field.getAttribute("name")
             field_handlers.append((name,field.getAttribute("datatype"),
                                    field_size,encoders[field.getAttribute("datatype")],
                                    decoders[field.getAttribute("datatype")]))
-        #print(hex(int(msg.getAttribute("msgtype"),16)))
         message_handlers[hex(int(msg.getAttribute("msgtype"),16))] = field_handlers
-
+    return message_handlers
 
 
 def parse_msg(data):
@@ -209,38 +200,118 @@ def parse_msg(data):
     for e in elements[1:]:
         pair = e.split("=")
         fields[pair[0]] = pair[1]
-    return(hex(int(clean_value(elements[0].split("=")[1]),16)),fields)
+    return hex(int(elements[0].split("=")[1],16)), fields
 
-def clean_value(elem):
-    return elem
 
 def encode_message(message_handlers, raw_msg):
     obj = parse_msg(raw_msg)
-    handler = message_handlers[obj[0]]
-    result =""
-    for msg_handler in handler:
-        #print(obj[1])
-        if msg_handler[0] in obj[1]:
-            val = obj[1][msg_handler[0]]
-            val = clean_value(val)
-        else:
-            val = "\00"
-        print(val + " + " + msg_handler[1] + "  -> " + msg_handler[3](val))
-        result += msg_handler[3](val)
-        result += " "
-    return result
+    if obj[0] in message_handlers:
+        handler = message_handlers[obj[0]]
+        result = str(obj[0][2:]) + " "
+        for msg_handler in handler:
+            if msg_handler[0] in obj[1]:
+                val = obj[1][msg_handler[0]]
+            else:
+                val = "\00"
+            result += msg_handler[3](val)
+            result += " "
+            length = (len(result) / 3) + 1
+        return (hex(int(length))[2:].zfill(2) + " " + result[0:-1]).upper()
+    else:
+        return None
+
 
 def decode_message(message_handlers, hex_string_msg):
-    msg_type = message_handlers["0x"+hex_string_msg[0:2]]
+    result = ""#hex_string_msg[0:2] + " + length -> " +  str(int.from_bytes(bytes.fromhex(hex_string_msg[0:2]), byteorder='little')) + "\n"
+    result += "type=" + "0x" + hex_string_msg[3:5] + " "
+    #print(message_handlers.keys())
+    field_handlers = message_handlers["0x" + hex_string_msg[3:5]]
     byte_msg = bytes.fromhex(hex_string_msg)
-    offset = 1
-    for msg_handler in msg_type:
-        val = msg_handler[4](byte_msg,offset,msg_handler[2])
-        print(chunkfy(binascii.hexlify(byte_msg[offset:offset+msg_handler[2]]).decode()) + " + "+msg_handler[1]+" -> " + str(val))
-        offset += msg_handler[2]
+    offset = 2
+    for handler in field_handlers:
+        val = handler[4](byte_msg, offset, handler[2])
+        #result += (chunkfy(binascii.hexlify(byte_msg[offset:offset + handler[2]]).decode()) + " + " + handler[1] + " -> '" + str(val).strip()+ "'") + "\n"
+        result += handler[0] + "=" + str(val).strip()+ "" + " "
+        offset += handler[2]
+    return result
+
+#########################################################
+mitch_names_to_new_names_map = {
+     hex(int("0x41",16)): {
+"ITCH Nanosecond":"Nanosecond",
+"ITCH Order ID":"OrderID",
+"ITCH Side":"Side",
+"ITCH Quantity":"Quantity",
+"LSE ITCH Instrument ID":"InstrumentID",
+"ITCH Reserved 1": "Rsv1",
+"ITCH Reserved 2": "Rsv2",
+"ITCH Price":"Price",
+"ITCH Flags":"Flags"},
+
+    hex(int("0x46",16)): { #"ITCH Add Attributed Order"
+"ITCH Nanosecond" : "Nanosec",
+"ITCH Order ID" :"OrdID",
+"ITCH Side" :"Side",
+"ITCH Quantity" :"Quantity",
+"LSE ITCH Instrument ID" :"InstrumentID",
+"ITCH Reserved 1" :"Rsv1",
+"ITCH Reserved 2" :"Rsv2",
+"ITCH Price" :"Price",
+"ITCH Attribution" :"Attribution",
+"ITCH Flags" :"Flags"},
+
+    hex(int("0x44",16)): { #"ITCH Order Deleted"
+"ITCH Nanosecond" :"Nanosecond",
+"ITCH Order ID" :"OrderID",
+"ITCH Flags" :"Flags",
+"InstID" : "InstID"},
+
+    hex(int("0x55",16)): { #"ITCH Order Modified"
+"ITCH Nanosecond" :"Nanosecond",
+"ITCH Order ID" :"OrderID",
+"ITCH New Quantity" :"NewQuantity",
+"ITCH New Price" :"NewPrice",
+"ITCH Flags" :"Flags"},
+
+    hex(int("0x79",16)): { #"ITCH Order Book Clear"
+"ITCH Nanosecond": "Nanosecond",
+"LSE ITCH Instrument ID" : "InstrumentID" ,
+"ITCH Reserved 1": "Rsv1",
+"ITCH Reserved 2": "Rsv2",
+"ITCH Flags" : "Flags"},
+
+    hex(int("0x54",16)): {#"ITCH Time"
+"ITCH Seconds": "Secs"},
+
+    hex(int("0x45",16)): { #"ITCH Order Executed"
+"ITCH Nanosecond":"Nanosecond",
+"ITCH Order ID": "OrderID",
+"ITCH Executed Quantity": "ExecutedQuantity",
+"ITCH Trade ID": "TradeID"},
+
+    hex(int("0x43",16)): { #"ITCH Order Executed With Price"
+"ITCH Nanosecond" : "Nanosecond",
+"ITCH Order ID" : "OrderID",
+"ITCH Executed Quantity" : "ExecutedQuantity",
+"ITCH Display Quantity" : "DisplayQuantity",
+"ITCH Trade ID" : "TradeID",
+"ITCH Printable" : "Printable",
+"ITCH Price" : "Price" }
+}
 
 
-#print(encode_message(message_handlers,f_txt_msg))
-#decode_message(message_handlers,f_hex_msg)
+def apply_name_convention_for_fields(message_handlers, mitch_names_to_new_names_map):
+    new_dict = dict()
+    for key, value in message_handlers.items():
+        if key in mitch_names_to_new_names_map:
+            new_values = []
+            for e in value:
+                new_values.append([mitch_names_to_new_names_map[key][e[0]], *e[1:]])
+            new_dict[key] = new_values
+    return new_dict
 
-
+#message_handlers = apply_name_convention_for_fields(load_grammar("level2-itchmarketdataspecification-5-1-230710.txt"),mitch_names_to_new_names_map)
+#print(message_handlers)
+#print(encode_message(message_handlers, "Type=0x79 Nanosecond=034344000 InstrumentID=21472 Flags=0x00"))
+#print(" ")
+#print(decode_message(message_handlers, "0D 79 40 0C 0C 02 E0 53 00 00 00 00 00"))
