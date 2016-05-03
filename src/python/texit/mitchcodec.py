@@ -131,14 +131,14 @@ def parse_alpha_with_length(length):
 
 
 def encode_price_from_string(data, length):
-    dotIndex = data.find('.')
-    if dotIndex < 0:
+    dot_index = data.find('.')
+    if dot_index < 0:
         data += "00000000"
     else:
-        exiting = len(data)-dotIndex -1
+        exiting = len(data) - dot_index - 1
         for i in range(0,8-exiting):
             data += "0"
-        data = data[0:dotIndex] + data[dotIndex+1:]
+        data = data[0: dot_index] + data[dot_index + 1:]
     return encode_signed_integer(int(data), length)
 
 
@@ -163,29 +163,23 @@ def decode_price(decimals):
 
 def load_grammar(file):
     doc = minidom.parse(file)
-    sizes = {"Alpha": 0, "BitField": 1, "Byte": 1, "Date": 8, "Time": 8, "Price": 8, "UInt8": 1, "UInt16": 2, "UInt32": 4,
-        "UInt64": 8}
+    sizes = {"Alpha": 0, "BitField": 1, "Byte": 1, "Date": 8, "Time": 8, "Price": 8, "UInt8": 1, "UInt16": 2,
+             "UInt32": 4, "UInt64": 8}
     decoders = {"Alpha": decode_alpha, "BitField": decode_bitfield, "Byte": decode_byte, "Date": decode_date,
-            "Time": decode_time, "Price": decode_price(100000000), "UInt8": decode_integer, "UInt16": decode_integer,
-            "UInt32": decode_integer, "UInt64": decode_integer}
+                "Time": decode_time, "Price": decode_price(100000000), "UInt8": decode_integer,
+                "UInt16": decode_integer, "UInt32": decode_integer, "UInt64": decode_integer}
     encoders = {"Alpha": encode_alpha, "BitField": encode_bitfield, "Byte": encode_byte, "Date": encode_date,
-            "Time": encode_time,
-            "Price": encode_price(8), "UInt8": encode_uint(1), "UInt16": encode_uint(2), "UInt32": encode_uint(4),
-            "UInt64": encode_uint(8)}
+                "Time": encode_time, "Price": encode_price(8), "UInt8": encode_uint(1), "UInt16": encode_uint(2),
+                "UInt32": encode_uint(4), "UInt64": encode_uint(8)}
     msgs = doc.getElementsByTagName("msg")
     message_handlers = dict()
     for msg in msgs:
         fields = msg.getElementsByTagName("fld")
         field_handlers = []
         for field in fields:
-            #print("    %s / %s / %s  %s" % (field.getAttribute("datatype"), field.getAttribute("length"),
-            #                                field.getAttribute("decimal_points"), field.getAttribute("name")))
             field_size = sizes[field.getAttribute("datatype")]
             if field_size == 0:
                 field_size = int(field.getAttribute("length"))
-            #if msg.getAttribute("name") in mitch_names_to_feprdr_names_map:
-            #    name = mitch_names_to_feprdr_names_map[msg.getAttribute("name")][field.getAttribute("name")]
-            #else:
             name = field.getAttribute("name")
             field_handlers.append((name,field.getAttribute("datatype"),
                                    field_size,encoders[field.getAttribute("datatype")],
@@ -208,95 +202,151 @@ def encode_message(message_handlers, raw_msg):
     if obj[0] in message_handlers:
         handler = message_handlers[obj[0]]
         result = str(obj[0][2:]) + " "
-        for msg_handler in handler:
-            if msg_handler[0] in obj[1]:
-                val = obj[1][msg_handler[0]]
-            else:
-                val = "\00"
-            result += msg_handler[3](val)
-            result += " "
-            length = (len(result) / 3) + 1
-        return (hex(int(length))[2:].zfill(2) + " " + result[0:-1]).upper()
+        result += " ".join([msg_handler[3](obj[1].get(msg_handler[0])) for msg_handler in handler])
+        length = (len(result) / 3) + 2
+        return (hex(int(length))[2:].zfill(2) + " " + result).upper()
     else:
         return None
 
 
+def decode_bitfield2(decorators):
+    def x(data, start, length):
+        bit_array = decode_bitfield(data, start, length)
+        return "0" + str(data[start:start+length])[3:-1]\
+               + "(" + ",".join([elem[1] + "=" + bit_array[elem[0] - 1] for elem in decorators]) + ")"
+    return x
+
+
+def decode_to_blank(data, start, length):
+    return None
+
+
+def encode_from_blank(data):
+    return "00"
+
+
 def decode_message(message_handlers, hex_string_msg):
-    result = ""#hex_string_msg[0:2] + " + length -> " +  str(int.from_bytes(bytes.fromhex(hex_string_msg[0:2]), byteorder='little')) + "\n"
-    result += "type=" + "0x" + hex_string_msg[3:5] + " "
-    #print(message_handlers.keys())
+    result = "Message=0x" + hex_string_msg[3:5] + " "  # TODO move to 'header' transformator
     field_handlers = message_handlers["0x" + hex_string_msg[3:5]]
     byte_msg = bytes.fromhex(hex_string_msg)
     offset = 2
     for handler in field_handlers:
         val = handler[4](byte_msg, offset, handler[2])
-        #result += (chunkfy(binascii.hexlify(byte_msg[offset:offset + handler[2]]).decode()) + " + " + handler[1] + " -> '" + str(val).strip()+ "'") + "\n"
-        result += handler[0] + "=" + str(val).strip()+ "" + " "
+        if val is not None:
+            result += handler[0] + "=" + str(val).strip()+ "" + " "
         offset += handler[2]
     return result
 
 #########################################################
 mitch_names_to_new_names_map = {
-     hex(int("0x41",16)): {
-"ITCH Nanosecond":"Nanosecond",
-"ITCH Order ID":"OrderID",
-"ITCH Side":"Side",
-"ITCH Quantity":"Quantity",
-"LSE ITCH Instrument ID":"InstrumentID",
-"ITCH Reserved 1": "Rsv1",
-"ITCH Reserved 2": "Rsv2",
-"ITCH Price":"Price",
-"ITCH Flags":"Flags"},
+    hex(int("0x41", 16)): {  # "ITCH Add Order"
+        "ITCH Nanosecond": "Nanosecond",
+        "ITCH Order ID": "OrderID",
+        "ITCH Side": "Side",
+        "ITCH Quantity": "Quantity",
+        "LSE ITCH Instrument ID": "InstrumentID",
+        "ITCH Reserved 1": "Rsv1",
+        "ITCH Reserved 2": "Rsv2",
+        "ITCH Price": "Price",
+        "ITCH Flags": "Flags"
+    },
+    hex(int("0x46", 16)): {  # "ITCH Add Attributed Order"
+        "ITCH Nanosecond": "Nanosec",
+        "ITCH Order ID": "OrdID",
+        "ITCH Side": "Side",
+        "ITCH Quantity": "Quantity",
+        "LSE ITCH Instrument ID": "InstrumentID",
+        "ITCH Reserved 1": "Rsv1",
+        "ITCH Reserved 2": "Rsv2",
+        "ITCH Price": "Price",
+        "ITCH Attribution": "Attribution",
+        "ITCH Flags": "Flags"
+    },
+    hex(int("0x44", 16)): {  # "ITCH Order Deleted"
+        "ITCH Nanosecond": "Nanosecond",
+        "ITCH Order ID": "OrderID",
+        "ITCH Flags": "Flags",
+        "InstID": "InstID"
+    },
+    hex(int("0x55", 16)): {  # "ITCH Order Modified"
+        "ITCH Nanosecond": "Nanosecond",
+        "ITCH Order ID": "OrderID",
+        "ITCH New Quantity": "NewQuantity",
+        "ITCH New Price": "NewPrice",
+        "ITCH Flags": "Flags"
+    },
+    hex(int("0x79", 16)): {  # "ITCH Order Book Clear"
+        "ITCH Nanosecond": "Nanosecond",
+        "LSE ITCH Instrument ID": "InstrumentID" ,
+        "ITCH Reserved 1": "Rsv1",
+        "ITCH Reserved 2": "Rsv2",
+        "ITCH Flags": "Flags"
+    },
+    hex(int("0x54", 16)): {  # "ITCH Time"
+        "ITCH Seconds": "Secs"
+    },
+    hex(int("0x45", 16)): {  # "ITCH Order Executed"
+        "ITCH Nanosecond":"Nanosecond",
+        "ITCH Order ID": "OrderID",
+        "ITCH Executed Quantity": "ExecutedQuantity",
+        "ITCH Trade ID": "TradeID"
+    },
+    hex(int("0x43", 16)): {  # "ITCH Order Executed With Price"
+        "ITCH Nanosecond": "Nanosecond",
+        "ITCH Order ID": "OrderID",
+        "ITCH Executed Quantity": "ExecutedQuantity",
+        "ITCH Display Quantity": "DisplayQuantity",
+        "ITCH Trade ID": "TradeID",
+        "ITCH Printable": "Printable",
+        "ITCH Price": "Price"
+    }
+}
 
-    hex(int("0x46",16)): { #"ITCH Add Attributed Order"
-"ITCH Nanosecond" : "Nanosec",
-"ITCH Order ID" :"OrdID",
-"ITCH Side" :"Side",
-"ITCH Quantity" :"Quantity",
-"LSE ITCH Instrument ID" :"InstrumentID",
-"ITCH Reserved 1" :"Rsv1",
-"ITCH Reserved 2" :"Rsv2",
-"ITCH Price" :"Price",
-"ITCH Attribution" :"Attribution",
-"ITCH Flags" :"Flags"},
+field_decoder_decorators = {
+    hex(int("0x41", 16)): {  # "ITCH Add Order"
+        "Flags": decode_bitfield2({(1, "bit1")})
+    },
+    hex(int("0x46", 16)): {  # "ITCH Add Attributed Order"
+        "Flags": decode_bitfield2({(2, "bit2"), (3, "bit3")})
+    },
+    hex(int("0x44", 16)): {  # "ITCH Order Deleted"
+        "Flags": decode_bitfield2({(4, "bit4")})
+    },
+    hex(int("0x55", 16)): {  # "ITCH Order Modified"
+        "Flags": decode_bitfield2({(0, "bit0"), (5, "bit5")})
+    },
+    hex(int("0x79" ,16)): {  # "ITCH Order Book Clear"
+        "Flags": decode_bitfield2({(5, "bit5")}),
+        "Rsv1": decode_to_blank,
+        "Rsv2": decode_to_blank
+    },
+    hex(int("0x54", 16)): {  # "ITCH Time"
+    },
+    hex(int("0x45", 16)): {  # "ITCH Order Executed"
+    },
+    hex(int("0x43", 16)): {  # "ITCH Order Executed With Price"
+    }
+}
 
-    hex(int("0x44",16)): { #"ITCH Order Deleted"
-"ITCH Nanosecond" :"Nanosecond",
-"ITCH Order ID" :"OrderID",
-"ITCH Flags" :"Flags",
-"InstID" : "InstID"},
-
-    hex(int("0x55",16)): { #"ITCH Order Modified"
-"ITCH Nanosecond" :"Nanosecond",
-"ITCH Order ID" :"OrderID",
-"ITCH New Quantity" :"NewQuantity",
-"ITCH New Price" :"NewPrice",
-"ITCH Flags" :"Flags"},
-
-    hex(int("0x79",16)): { #"ITCH Order Book Clear"
-"ITCH Nanosecond": "Nanosecond",
-"LSE ITCH Instrument ID" : "InstrumentID" ,
-"ITCH Reserved 1": "Rsv1",
-"ITCH Reserved 2": "Rsv2",
-"ITCH Flags" : "Flags"},
-
-    hex(int("0x54",16)): {#"ITCH Time"
-"ITCH Seconds": "Secs"},
-
-    hex(int("0x45",16)): { #"ITCH Order Executed"
-"ITCH Nanosecond":"Nanosecond",
-"ITCH Order ID": "OrderID",
-"ITCH Executed Quantity": "ExecutedQuantity",
-"ITCH Trade ID": "TradeID"},
-
-    hex(int("0x43",16)): { #"ITCH Order Executed With Price"
-"ITCH Nanosecond" : "Nanosecond",
-"ITCH Order ID" : "OrderID",
-"ITCH Executed Quantity" : "ExecutedQuantity",
-"ITCH Display Quantity" : "DisplayQuantity",
-"ITCH Trade ID" : "TradeID",
-"ITCH Printable" : "Printable",
-"ITCH Price" : "Price" }
+field_encoder_decorators = {
+    hex(int("0x41", 16)): {  # "ITCH Add Order"
+    },
+    hex(int("0x46", 16)): {  # "ITCH Add Attributed Order"
+    },
+    hex(int("0x44", 16)): {  # "ITCH Order Deleted"
+    },
+    hex(int("0x55", 16)): {  # "ITCH Order Modified"
+    },
+    hex(int("0x79", 16)): {  # "ITCH Order Book Clear"
+        "Rsv1": encode_from_blank,
+        "Rsv2": encode_from_blank
+    },
+    hex(int("0x54", 16)): {  # "ITCH Time"
+    },
+    hex(int("0x45", 16)): {  # "ITCH Order Executed"
+    },
+    hex(int("0x43", 16)): {  # "ITCH Order Executed With Price"
+    }
 }
 
 
@@ -310,8 +360,22 @@ def apply_name_convention_for_fields(message_handlers, mitch_names_to_new_names_
             new_dict[key] = new_values
     return new_dict
 
-#message_handlers = apply_name_convention_for_fields(load_grammar("level2-itchmarketdataspecification-5-1-230710.txt"),mitch_names_to_new_names_map)
-#print(message_handlers)
-#print(encode_message(message_handlers, "Type=0x79 Nanosecond=034344000 InstrumentID=21472 Flags=0x00"))
-#print(" ")
-#print(decode_message(message_handlers, "0D 79 40 0C 0C 02 E0 53 00 00 00 00 00"))
+
+def specify_grammar(handlers, specific_encoder, specific_decoder):
+    for handler in handlers:
+        if handler in specific_encoder:
+            for msg in handlers[handler]:
+                if msg[0] in specific_encoder[handler]:
+                    msg[3] = specific_encoder[handler][msg[0]]
+        if handler in specific_decoder:
+            for msg in handlers[handler]:
+                if msg[0] in specific_decoder[handler]:
+                    msg[4] = specific_decoder[handler][msg[0]]
+
+if __name__ == "__main__":
+    message_handlers = apply_name_convention_for_fields(
+        load_grammar("level2-itchmarketdataspecification-5-1-230710.txt"), mitch_names_to_new_names_map)
+    specify_grammar(message_handlers, field_encoder_decorators, field_decoder_decorators)
+    print(encode_message(message_handlers, "Type=0x79 Nanosecond=034344000 InstrumentID=21472 Flags=0x00"))
+    print(decode_message(message_handlers, "0D 79 40 0C 0C 02 E0 53 00 00 00 00 08"))
+    print(decode_message(message_handlers, "0D 79 40 0C 0C 02 E0 53 00 00 00 00 10"))
