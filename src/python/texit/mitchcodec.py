@@ -196,10 +196,6 @@ def encode_msg_from_tag_vals(handlers, type_decoder, tag_values):
         return None
 
 
-def encode_all(handlers, type_decoder, tag_values):
-    return encode_msg_from_tag_vals(handlers, type_decoder, tag_values)
-
-
 def decode_msg_from_hex_string(handlers, type_decoder, value):
     type_byte = type_decoder(value)
     if type_byte in handlers:
@@ -341,6 +337,8 @@ mitch_handlers_2 = {
 mitch_handlers_3 = {
 
 }
+
+
 type_from_tag_vals = lambda tag_values: hex(int(tag_values.get("type")[:tag_values.get("type").index("/")], 16)) \
     if "type" in tag_values else hex(int("0x3B", 16))
 type_from_hex_string = lambda value: hex(int("0x" + value[3:5],16))
@@ -349,7 +347,7 @@ type_from_hex_string = lambda value: hex(int("0x" + value[3:5],16))
 
 def test_from_text_msg(schema, type_from_tag_vals, type_from_hex_string, text_message):
     msg_tag_values = parse_msg(text_message)
-    hex_message = encode_all(schema, type_from_tag_vals, msg_tag_values)
+    hex_message = encode_msg_from_tag_vals(schema, type_from_tag_vals, msg_tag_values)
     print(text_message)
     print(hex_message)
     print(decode_msg_from_hex_string(schema, type_from_hex_string, hex_message))
@@ -360,6 +358,6 @@ def test_from_hex_msg(schema, type_from_tag_vals, type_from_hex_string, hex_mess
     print(hex_message)
     print(text_message)
     msg_tag_values = parse_msg(text_message)
-    print(encode_all(schema, type_from_tag_vals, msg_tag_values))
+    print(encode_msg_from_tag_vals(schema, type_from_tag_vals, msg_tag_values))
     print("")
 
