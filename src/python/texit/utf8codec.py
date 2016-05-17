@@ -94,34 +94,48 @@ def decode_msg_from_utf8string(handlers, type_decoder, value):
     else:
         return None
 
+def dict_decode_msg_from_utf8string(handlers, type_decoder, value):
+    type = type_decoder(value)
+    x= dict()
+    if type in handlers:
+        handler = handlers[type]
+        result = ""
+        offset = 0
+        for field_handler in handler:
+            val = field_handler[2](value, offset, field_handler[1])
+            if val is not None:
+                x[field_handler[0]] = str(val).strip()
+            offset += field_handler[1]
+        return x
+    else:
+        return None
+#i1 = 1407
+#print(type(i1),i1)
+#b1 = (i1).to_bytes(4, byteorder='big')
+#print(type(b1),b1)
+#s2 = b1.decode("utf-8")
+#print("s2",type(s2),s2)
+#b2 = s2.encode("utf-8")
+#print(type(b2),b2)
+#i2 = int.from_bytes(b2, byteorder='big')
+#print(type(i2),i2)
 
-i1 = 1407
-print(type(i1),i1)
-b1 = (i1).to_bytes(4, byteorder='big')
-print(type(b1),b1)
-s2 = b1.decode("utf-8")
-print("s2",type(s2),s2)
-b2 = s2.encode("utf-8")
-print(type(b2),b2)
-i2 = int.from_bytes(b2, byteorder='big')
-print(type(i2),i2)
+#s= "0078.0"
+#dec_s = decode_integer(s,0,len(s))
+#enc_s= encode_integer(dec_s,6)
+#print(dec_s)
+#print(enc_s)
 
-s= "0078.0"
-dec_s = decode_integer(s,0,len(s))
-enc_s= encode_integer(dec_s,6)
-print(dec_s)
-print(enc_s)
-
-s= "780"
-dec_s = decode_decimal(s,0,len(s))
-enc_s= encode_decimal(dec_s,6)
-print(dec_s)
-print(enc_s)
+#s= "780"
+#dec_s = decode_decimal(s,0,len(s))
+#enc_s= encode_decimal(dec_s,6)
+#print(dec_s)
+#print(enc_s)
 
 
-sample ="type=ex1 bin1=1 bin2=45 bin4=65 integer=7.6 ascii=Simon"
-result = encode_msg_from_tag_vals(utf8exit_handlers, type_from_tag_vals, parse_msg(sample))
-print(result)
-print(result.encode("utf-8"))
-rev_result = decode_msg_from_utf8string(utf8exit_handlers, type_from_value, result)
-print(rev_result)
+#sample ="type=ex1 bin1=1 bin2=45 bin4=65 integer=7.6 ascii=Simon"
+#result = encode_msg_from_tag_vals(utf8exit_handlers, type_from_tag_vals, parse_msg(sample))
+#print(result)
+#print(result.encode("utf-8"))
+#rev_result = decode_msg_from_utf8string(utf8exit_handlers, type_from_value, result)
+#print(rev_result)
