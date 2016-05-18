@@ -139,3 +139,36 @@ def dict_decode_msg_from_utf8string(handlers, type_decoder, value):
 #print(result.encode("utf-8"))
 #rev_result = decode_msg_from_utf8string(utf8exit_handlers, type_from_value, result)
 #print(rev_result)
+
+
+
+def lstrip_hex(data,offset,hex_count):
+    for i in range(0,hex_count):
+        if msg[offset] == '<':
+            offset += 4
+        else:
+            offset +=1
+    return data[offset:]
+
+#msg ="<As>n<as>M<er><6y><ty><ty>o1TEXTTXTTEXTEXTETX"
+#print(lstrip_hex(msg,0,9))
+
+
+def parse_msg_with_spaces(data):
+    fields = dict()
+    elems = data.split()
+    prec = ()
+    for e in elems:
+        pair = e.split("=")
+        if len(pair) == 2:
+            if len(prec) > 0:
+                fields[prec[0]]=prec[1]
+            prec = pair
+        else:
+            prec[1] = prec[1] + " " + pair[0]
+    if len(prec) > 0:
+        fields[prec[0]] = prec[1]
+    return fields
+
+# msg="abc=12 def=ala ma kota gh=323 h="
+#print(parse_msg_with_spaces(msg))
