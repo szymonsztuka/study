@@ -144,7 +144,7 @@ def dict_decode_msg_from_utf8string(handlers, type_decoder, value):
 
 def lstrip_hex(data,offset,hex_count):
     for i in range(0,hex_count):
-        if msg[offset] == '<':
+        if data[offset] == '<':
             offset += 4
         else:
             offset +=1

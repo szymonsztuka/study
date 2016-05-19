@@ -57,6 +57,8 @@ def decode_integer(data, start, length):
 
 
 def encode_integer(data, length):
+    if '' == data:
+        data = '0'
     rev_byte_val = int(data).to_bytes(length, 'little')
     rev_hex_val_unspaced = binascii.hexlify(bytearray(rev_byte_val)).decode()
     return chunkfy(rev_hex_val_unspaced)
@@ -181,6 +183,7 @@ def parse_msg(data):
     elements = data.split()
     for e in elements:
         pair = e.split("=")
+        print(pair)
         fields[pair[0]] = pair[1]
     return fields
 
