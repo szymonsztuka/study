@@ -1,4 +1,7 @@
 import utf8codec as u
+import binascii
+from sys import argv
+import sys
 
 
 def decode_a(data, start, length):
@@ -33,6 +36,16 @@ def decode_n(data, start, length):
 
 def encode_n(data, length):
     return encode_x(data,length)
+
+
+def encode_optional(funct):
+    def internal(data, length):
+        res = funct(data, length)
+        if str(res) == '' or str(res).strip('0') or str(res).rstrip():
+            return ''
+        else:
+            return res
+    return internal
 
 
 #http://www.oslobors.no/ob_eng/Oslo-Boers/Trading/Trading-systems/SOLA
@@ -148,27 +161,27 @@ hsvf_handlers = {
         ("SequenceNumber", 9, decode_n, encode_n),
         ("type", 2, decode_a, encode_a),
         ("ExchangeID", 1, decode_a, encode_a),
-        ("SymbolRoot", 6, decode_x, encode_x),
+        ("SymbolRoot", 6, decode_a, encode_a), #x -> a
         ("InstrumentGroup", 2, decode_x, encode_x),
         ("GroupStatus", 1, decode_a, encode_a),
         ("ScheduledTime", 6, decode_n, encode_n),
-        ("UnderlyingSymbolRoot", 10, decode_x, encode_x),
+        ("UnderlyingSymbolRoot", 10, decode_a, encode_a), #x -> a
         ("DeliveryType", 1, decode_a, encode_a),
         ("DefaultContractSize", 8, decode_n, encode_n),
-        ("Description", 100, decode_x, encode_x)
+        ("Description", 100, decode_a, encode_a)  #x -> a
     ),
     "GR": (
         ("SequenceNumber", 9, decode_n, encode_n),
         ("type", 2, decode_a, encode_a),
         ("ExchangeID", 1, decode_a, encode_a),
-        ("SymbolRoot", 6, decode_a, encode_a),
+        ("SymbolRoot", 6, decode_a, encode_a), #x -> a
         ("InstrumentGroup", 2, decode_x, encode_x),
         ("GroupStatus", 1, decode_a, encode_a),
-        ("Filler", 6, decode_x, encode_x),
-        ("UnderlyingSymbolRoot", 10, decode_x, encode_x),
+        ("Filler", 6, decode_a, encode_a), #x -> a
+        ("UnderlyingSymbolRoot", 10, decode_a, encode_a), #x -> a
         ("DeliveryType", 1, decode_a, encode_a),
         ("DefaultContractSize", 8, decode_n, encode_n),
-        ("Description", 100, decode_x, encode_x)
+        ("Description", 100, decode_a, encode_a), #x -> a
     ),
     "H": (
         ("SequenceNumber", 9, decode_n, encode_n),
@@ -234,6 +247,7 @@ hsvf_handlers = {
         ("CorporateAction", 1, decode_a, encode_a),
         ("InstrumentStatusMarker", 1, decode_a, encode_a),
         ("NumberOfLevel", 1, decode_n, encode_n),
+
         ("LevelOfMarketDepth", 1, decode_a, encode_a),
         ("BidPrice", 8, decode_x, encode_x),
         ("BidSize", 5, decode_n, encode_n),
@@ -328,9 +342,9 @@ hsvf_handlers = {
         ("GroupInstrument", 2, decode_x, encode_x),
         ("Instrument", 2, decode_x, encode_x),
         ("ISIN", 12, decode_x, encode_x),
-        ("InstrumentExternalCode", 30, decode_x, encode_x),
+        ("InstrumentExternalCode", 30, decode_a, encode_a),  # x -> a
         ("OptionMarker", 2, decode_a, encode_a),
-        ("UnderlyingSymbolRoot", 10, decode_x, encode_x),
+        ("UnderlyingSymbolRoot", 10, decode_a, encode_a),  # x -> a
         ("ContractSize", 8, decode_n, encode_n),
         ("TickValue", 8, decode_x, encode_x)
     ),
@@ -360,7 +374,7 @@ hsvf_handlers = {
         ("Currency", 3, decode_a, encode_a),
         ("UnderlyingSymbolRoot", 10, decode_a, encode_a), #x -> a
         ("ContractSize", 8, decode_n, encode_n),
-        ("TickValue", 8, decode_x, encode_x)
+        ("TickValue1", 8, decode_x, encode_x)
     ),
     "N": (
         ("SequenceNumber", 9, decode_n, encode_n),
@@ -381,7 +395,7 @@ hsvf_handlers = {
         ("ClosingPrice", 8, decode_x, encode_x),
         ("SettlementPrice", 8, decode_x, encode_x),
         ("OpenInterest", 7, decode_n, encode_n),
-        ("Tick", 1, decode_x, encode_x),
+        ("Tick", 1, decode_a, encode_a),  # x -> a
         ("Volume", 8, decode_n, encode_n),
         ("NetChangeSign", 1, decode_a, encode_a),
         ("NetChange", 8, decode_x, encode_x),
@@ -433,11 +447,80 @@ def parse_msg(data):
         pair = e.split("=")
         fields[pair[0]] = pair[1]
     return fields
-print(str(len(hsvf_handlers)))
-msg = ""
-a=u.decode_msg_from_utf8string(hsvf_handlers, type_from_value, msg)
-print("Decoded:")
-print(a)
-print("Encoded:")
-print(u.encode_msg_from_tag_vals(hsvf_handlers, u.type_from_tag_vals, parse_msg(a)))
-print(msg)
+
+def parse_msg_with_spaces(data):
+    fields = dict()
+    elems = data.split()
+    prec = ()
+    for e in elems:
+        pair = e.split("=")
+        if len(pair) == 2:
+            if len(prec) > 0:
+                fields[prec[0]]=prec[1]
+            prec = pair
+        else:
+            prec[1] = prec[1] + " " + pair[0]
+    if len(prec) > 0:
+        fields[prec[0]] = prec[1]
+    return fields
+
+def chunkfy(data):
+    return " ".join(data[i:i+2] for i in range(0, len(data), 2))
+
+def encode_hex(payload):
+    return chunkfy(binascii.hexlify(payload.encode()).decode()).upper()
+
+#line =
+#expected_hex =
+
+#seq = line[0:line.index(" ")]
+#payload = line[len(seq)+1:]
+#if type_from_value(payload) in hsvf_handlers:
+#    a = u.decode_msg_from_utf8string(hsvf_handlers, type_from_value, payload)
+#    print("Decoded:")
+#    print(a)
+#    print("Encoded:")
+#    back = u.encode_msg_from_tag_vals(hsvf_handlers, u.type_from_tag_vals, parse_msg_with_spaces(a))
+#    print("Res: "+ back)
+#    print("Exp: " + payload)
+#    print(back.rstrip() == payload)
+#    print("Encoded in hex:")
+#    hex = encode_hex(back)
+#    print("Res: "+ hex)
+#    print("Exp: " +expected_hex)
+#    print(expected_hex == hex)
+
+if __name__ == '__main__':
+    handlers = hsvf_handlers
+    if 'f' in argv:
+        for line in sys.stdin:
+            if " " not in line:
+                print("'"+line+"'")
+            else:
+                seq = line[0:line.index(" ")]
+                payload = line[len(seq)+1:]
+                if type_from_value(payload) in handlers:
+                    sys.stdout.write(line)
+    elif 'e' in argv or len(argv) == 1:  # default option
+        for line in sys.stdin:
+            if " " not in line:
+                print("'"+line+"'")
+            else:
+                seq = line[0:line.index(" ")]
+                payload = line[len(seq)+1:]
+                if type_from_value(payload)  in handlers:
+                    parts = u.dict_decode_msg_from_utf8string(handlers, type_from_value, payload)
+                    res = u.encode_msg_from_tag_vals(handlers, lambda tag_values: tag_values.get("MsgType"), parts)
+                    full = encode_hex(res,int(seq.split("=")[1]))
+                    sys.stdout.write(full)
+                    sys.stdout.write("\n")
+    elif 't' in argv or len(argv) == 1:  # default option
+        for line in sys.stdin:
+            if " " not in line:
+                print("'"+line+"'")
+            else:
+                seq = line[0:line.index(" ")]
+                payload = line[len(seq)+1:]
+                if type_from_value(payload) in handlers:
+                    sys.stdout.write(payload)
+                    sys.stdout.write("\n")
