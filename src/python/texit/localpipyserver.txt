@@ -1,0 +1,38 @@
+#https://pypi.python.org/pypi/pypiserver#managing-the-package-directory
+#http://peterdowns.com/posts/first-time-with-pypi.html
+#http://python-packaging.readthedocs.io/en/latest/minimal.html
+
+home folder file .pypirc
+[distutils]
+index-servers =
+    local
+	
+[local]
+repository: http://localhost:8081/
+username: user
+password: <pass>
+
+
+pip install pypiserver[passlib]
+mkdir ~/packages              
+
+C:\repository\texit>python setup.py register -r local
+
+C:\repository\texit>python setup.py sdist upload -r local
+
+C:\>pip install -i http://localhost:8081/ texit
+
+--------------------
+setup.py
+
+from setuptools import setup
+
+setup(name='texit',
+      version='0.1',
+      description='texit',
+      url='http://github.com/ ',
+      author='',
+      author_email='',
+      license='MIT',
+      packages=['texit'],
+      zip_safe=False)
