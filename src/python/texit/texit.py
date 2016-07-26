@@ -29,7 +29,7 @@ if selected_group:
 else:
     print("nothing")
 
-Option = namedtuple('Option', ["codec", "input_groups", "selected_port", "selected_group", "codec", "stream", "localhost_ip", "original_feed_name", "dest_server"])
+Option = namedtuple('Option', ["encode_mode", "input_groups", "selected_port", "selected_group", "codec", "stream", "localhost_ip", "original_group_name", "dest_server"])
 
 def options(input_elements):
     original_feed_name = [e for e in input_elements if not e.startswith("-")]
@@ -48,61 +48,47 @@ def options(input_elements):
                   "".join(original_feed_name), "".join(dest_server) )
 
 
-def generator(option):
-    if option.encode_mode:
-        if option.codec:
-            if "fix" in option.codec:
-                codec = FixCodec()
-                enclosing = SimpleCodec(codec)
-            elif "mitch" in option.codec:
-                codec = MitchCodec(option.original_feed_name)
-                tcoddec = TaggedCodec(codec)
-                enclosing = SimpleCodec(tcoddec)
-            elif "tip" in option.codec:
-                codec = TipCodec()
-                enclosing = SimpleCodec(codec)
-            elif "ascii" in option.codec:
-                codec = AsciiCodec()
-                enclosing = SimpleCodec(codec)
-            else:
-                enclosing = SimpleCodec()  # TODO dummy
-
-            for line in sys.stdin:
-                res = enclosing.encode(line)
-                if res:
-                    yield res
-
+def createCodec(option):
+    if option.codec:
+        if "fix" in option.codec:
+            codec = FixCodec()
+            enclosing = SimpleCodec(codec)
+        elif "mitch" in option.codec:
+            codec = MitchCodec(option.original_feed_name)
+            tcoddec = TaggedCodec(codec)
+            enclosing = SimpleCodec(tcoddec)
+        elif "tip" in option.codec:
+            codec = TipCodec()
+            enclosing = SimpleCodec(codec)
+        elif "ascii" in option.codec:
+            codec = AsciiCodec()
+            enclosing = SimpleCodec(codec)
         else:
-            print("Option not recognized, list of supported options")
-            print(groups)
+            enclosing = SimpleCodec()  # TODO dummy
     else:
-        if option.codec:
-            if "fix" in option.codec:
-                codec = FixCodec()
-                enclosing = SimpleCodec(codec)
-            elif "mitch" in option.codec:
-                codec = MitchCodec(option.original_feed_name)
-                tcoddec = TaggedCodec(codec)
-                enclosing = SimpleCodec(tcoddec)
-            elif "ascii" in option.codec:
-                codec = AsciiCodec()
-                enclosing = SimpleCodec(codec)
-            else:
-                enclosing = SimpleCodec()  # TODO dummy
+        enclosing = None
+        print("Option not recognized, list of supported options")
+        print(groups)
+    return enclosing
 
-            for msg in simple_header_codec.read_messages_from_pipe():
-                res = enclosing.decode(msg)
-                if res:
-                    yield res
+def generator(codec, encode):
+    if encode:
+        for line in sys.stdin:
+            res = codec.encode(line)
+            if res:
+                yield res
+    else:
+        for msg in simple_header_codec.read_messages_from_pipe():
+            res = codec.decode(msg)
+            if res:
+                yield res
 
-        else:
-            print("Option not recognized, list of supported options")
-            print(groups)
 
 if __name__ == '__main__':
 
     option = options(argv[1:])
-    for msg in generator(option):
+    codec = createCodec(option)
+    for msg in generator(option.encode_mode):
         if option.encode_mode:
             os.write(sys.stdout.fileno(), msg)  # binary
         else:
