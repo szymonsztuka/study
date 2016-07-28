@@ -88,7 +88,7 @@ if __name__ == '__main__':
 
     option = options(argv[1:])
     codec = createCodec(option)
-    for msg in generator(option.encode_mode):
+    for msg in generator(codec, option.encode_mode):
         if option.encode_mode:
             os.write(sys.stdout.fileno(), msg)  # binary
         else:

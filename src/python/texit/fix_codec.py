@@ -9,7 +9,7 @@ class FixCodec:
 
     @staticmethod
     def replace_delimiters(data, fix_tags, old_delimiter=" ", new_delimiter=b'\x01'.decode("ascii"), append_new_delimiter=True):
-        if data.rstrip() == '' or data is None:
+        if data.rstrip() == '' or data is None or old_delimiter not in data:
             return None
         result = ""
         elems = data.split(old_delimiter)
@@ -21,7 +21,9 @@ class FixCodec:
                     result = result + prev[0] + "=" + "=".join(prev[1:]) + new_delimiter
                 prev = pair
             else:
+               # try:
                 prev[1] = prev[1] + " " + "=".join(pair)
+                #except IndexError:
         if len(prev) > 0:
             result = result + prev[0] + "=" + "=".join(prev[1:]) + new_delimiter
         if not append_new_delimiter:
