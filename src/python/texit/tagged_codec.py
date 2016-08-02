@@ -6,7 +6,7 @@ class TaggedCodec:
         self.decoder = payload_decoder
 
     @staticmethod
-    def parse_message(self, data):
+    def parse_message(data):
         fields = dict()
         elements = data.split()
         last_pair = ""
